@@ -1,0 +1,14 @@
+{
+  "docmost": { "url": "https://docmost.example.com/api", "token": "" },
+  "openviking": { "url": "http://openviking:1933", "api_key": "", "root": "viking://user/resources/docmost" },
+  "state_path": "data/state.json",
+  "interval": "24h",
+  "webhook": {
+    "listen": ":8080",
+    "path": "/events/docmost",
+    "secret": "",
+    "debounce": "10s"
+  },
+  "allowlist": [],
+  "denylist": []
+}
