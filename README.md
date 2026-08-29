@@ -8,7 +8,7 @@ Docmost не изменяется.
 Install the latest release for Linux or macOS:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/dapi/docmost-openviking-sync/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/dapi/docmost-openviking-sync/master/scripts/install.sh | sh
 ```
 
 Set `VERSION=v0.1.0` to pin a release and `INSTALL_DIR=/usr/local/bin` for a
