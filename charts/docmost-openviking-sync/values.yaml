@@ -1,0 +1,36 @@
+image:
+  repository: registry.brandymint.ru/rocketwash/docmost-openviking-sync
+  tag: "0.2.0"
+  pullPolicy: IfNotPresent
+
+secret:
+  existingSecret: rocketwash-docmost-openviking-sync
+
+config:
+  docmostURL: https://docmost.rocketwash.me/api
+  openVikingURL: http://192.168.88.14:1933
+  resourceRoot: viking://resources/rocketwash/docmost
+  interval: 24h
+  allowlist: []
+  denylist: []
+
+persistence:
+  storageClassName: raid-office4-retain
+  size: 1Gi
+
+nodeSelector:
+  kubernetes.io/hostname: office4
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+webhook:
+  enabled: false
+  port: 8080
+  service:
+    type: ClusterIP

@@ -1,0 +1,6 @@
+.git
+.github
+data
+config.json
+*.md
+!README.md

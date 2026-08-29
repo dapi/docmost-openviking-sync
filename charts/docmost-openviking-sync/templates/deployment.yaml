@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "docmost-openviking-sync.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "docmost-openviking-sync.name" . }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "docmost-openviking-sync.name" . }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "docmost-openviking-sync.name" . }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      containers:
+        - name: sync
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["-config", "/etc/docmost-openviking-sync/config.json", "daemon"]
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secret.existingSecret }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: config
+              mountPath: /etc/docmost-openviking-sync/config.json
+              subPath: config.json
+              readOnly: true
+            - name: state
+              mountPath: /var/lib/docmost-openviking-sync
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "docmost-openviking-sync.fullname" . }}
+        - name: state
+          persistentVolumeClaim:
+            claimName: {{ include "docmost-openviking-sync.fullname" . }}

@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "docmost-openviking-sync.fullname" . }}
+data:
+  config.json: |
+    {
+      "docmost": { "url": {{ .Values.config.docmostURL | quote }} },
+      "openviking": {
+        "url": {{ .Values.config.openVikingURL | quote }},
+        "root": {{ .Values.config.resourceRoot | quote }}
+      },
+      "state_path": "/var/lib/docmost-openviking-sync/state.json",
+      "interval": {{ .Values.config.interval | quote }},
+      "allowlist": {{ .Values.config.allowlist | toJson }},
+      "denylist": {{ .Values.config.denylist | toJson }},
+      "webhook": {
+        "listen": ":{{ .Values.webhook.port }}",
+        "path": "/events/docmost",
+        "debounce": "10s"
+      }
+    }

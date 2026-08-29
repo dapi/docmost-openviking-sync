@@ -92,3 +92,11 @@ webhook-доставок.
 Create and push a version tag, then start **Release** manually in GitHub
 Actions with that tag. The workflow verifies the code, builds Linux and macOS
 archives, publishes checksums, and creates the GitHub release.
+
+## Kubernetes
+
+The reusable chart is in `charts/docmost-openviking-sync`. It runs one daemon
+replica with a ReadWriteOnce PVC, uses an existing Kubernetes Secret for
+`DOCMOST_EMAIL`, `DOCMOST_PASSWORD`, and `OPENVIKING_API_KEY`, and defaults to
+the `viking://resources/rocketwash/docmost` root. The production Helmfile
+release is maintained in `~/code/brandymint/infra`.
