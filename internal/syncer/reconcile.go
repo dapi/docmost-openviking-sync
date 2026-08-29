@@ -21,8 +21,8 @@ type Reconciler struct {
 	State      State
 }
 
-func (r *Reconciler) Sync(ctx context.Context) Report {
-	report := Report{StartedAt: time.Now().UTC()}
+func (r *Reconciler) Sync(ctx context.Context) (report Report) {
+	report = Report{StartedAt: time.Now().UTC()}
 	defer func() { report.FinishedAt = time.Now().UTC() }()
 	spaces, err := r.Source.ListSpaces(ctx)
 	if err != nil {

@@ -1,6 +1,7 @@
 {
+  "mode": "sync",
   "docmost": { "url": "https://docmost.example.com/api", "token": "" },
-  "openviking": { "url": "http://openviking:1933", "api_key": "", "root": "viking://user/resources/docmost" },
+  "openviking": { "url": "http://127.0.0.1:1933", "api_key": "", "root": "viking://user/resources/docmost" },
   "state_path": "data/state.json",
   "interval": "24h",
   "webhook": {

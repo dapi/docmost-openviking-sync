@@ -22,10 +22,48 @@ docmost-openviking-sync -config config.json sync
 docmost-openviking-sync -config config.json daemon
 ```
 
-Секреты не нужно хранить в `config.json`: параметры `DOCMOST_API_URL`,
-`DOCMOST_API_TOKEN` (либо `DOCMOST_EMAIL` и `DOCMOST_PASSWORD`),
-`OPENVIKING_URL` и `OPENVIKING_API_KEY` имеют приоритет над пустыми полями
-файла. Для развёртывания загружайте их из `pass` через `.envrc`.
+Файл конфигурации необязателен. Приоритет значений:
+
+```text
+CLI arguments > environment variables > JSON config > defaults
+```
+
+Поэтому контейнер можно запускать только с ENV:
+
+```sh
+DOCMOST_API_URL=https://docmost.example.com/api \
+DOCMOST_API_TOKEN=... \
+DOCMOST_WEBHOOK_SECRET=... \
+docmost-openviking-sync daemon
+```
+
+Локальный OpenViking используется по умолчанию: `http://127.0.0.1:1933` с
+приватным root `viking://user/resources/docmost`. Если сервер требует
+авторизацию, передайте `OPENVIKING_API_KEY`.
+
+| JSON | ENV | CLI argument | Default |
+| --- | --- | --- | --- |
+| `mode` | `SYNC_MODE` | `--mode` или `sync`/`daemon` | `sync` |
+| — | `SYNC_CONFIG` | `--config` | без файла |
+| `docmost.url` | `DOCMOST_API_URL` (`DOCMOST_URL`) | `--docmost-url` | — |
+| `docmost.token` | `DOCMOST_API_TOKEN` (`DOCMOST_TOKEN`) | `--docmost-token` | — |
+| `docmost.email` | `DOCMOST_EMAIL` | `--docmost-email` | — |
+| `docmost.password` | `DOCMOST_PASSWORD` | `--docmost-password` | — |
+| `openviking.url` | `OPENVIKING_URL` | `--openviking-url` | `http://127.0.0.1:1933` |
+| `openviking.api_key` | `OPENVIKING_API_KEY` | `--openviking-api-key` | пусто |
+| `openviking.root` | `OPENVIKING_ROOT` | `--openviking-root` | `viking://user/resources/docmost` |
+| `state_path` | `SYNC_STATE_PATH` | `--state-path` | `data/state.json` |
+| `interval` | `SYNC_INTERVAL` | `--interval` | `24h` |
+| `allowlist` | `DOCMOST_SPACE_ALLOWLIST` | `--allowlist` | все spaces |
+| `denylist` | `DOCMOST_SPACE_DENYLIST` | `--denylist` | пусто |
+| `webhook.listen` | `WEBHOOK_LISTEN` | `--webhook-listen` | `:8080` |
+| `webhook.path` | `WEBHOOK_PATH` | `--webhook-path` | `/events/docmost` |
+| `webhook.secret` | `DOCMOST_WEBHOOK_SECRET` | `--webhook-secret` | пусто, receiver выключен |
+| `webhook.debounce` | `WEBHOOK_DEBOUNCE` | `--webhook-debounce` | `10s` |
+
+ENV и аргументы allowlist/denylist — списки через запятую. В Kubernetes
+секреты следует передавать из `Secret` через ENV. Секретные CLI-аргументы
+поддерживаются для полноты, но могут быть видны в списке процессов.
 
 Идентичность ресурса: `<root>/pages/<page_id>.md`. По умолчанию root — приватный
 `viking://user/resources/docmost`; публикация Docmost в общий

@@ -57,6 +57,9 @@ func TestSyncIsIncrementalAndDeletes(t *testing.T) {
 	if first.Created != 1 || len(sink.writes) != 1 {
 		t.Fatalf("first report: %+v", first)
 	}
+	if first.FinishedAt.IsZero() || first.FinishedAt.Before(first.StartedAt) {
+		t.Fatalf("invalid report timestamps: %+v", first)
+	}
 	second := r.Sync(context.Background())
 	if second.Skipped != 1 || len(sink.writes) != 1 {
 		t.Fatalf("second report: %+v", second)

@@ -23,6 +23,7 @@ import (
 var version = "dev"
 
 type config struct {
+	Mode    string `json:"mode"`
 	Docmost struct {
 		URL      string `json:"url"`
 		Token    string `json:"token"`
@@ -46,32 +47,45 @@ type config struct {
 	} `json:"webhook"`
 }
 
+type cliOptions struct {
+	ConfigPath       string
+	Mode             string
+	DocmostURL       string
+	DocmostToken     string
+	DocmostEmail     string
+	DocmostPassword  string
+	OpenVikingURL    string
+	OpenVikingAPIKey string
+	OpenVikingRoot   string
+	StatePath        string
+	Interval         string
+	Allowlist        string
+	Denylist         string
+	WebhookListen    string
+	WebhookPath      string
+	WebhookSecret    string
+	WebhookDebounce  string
+	ShowVersion      bool
+	visited          map[string]bool
+}
+
 func main() {
-	var path string
-	var showVersion bool
-	flag.StringVar(&path, "config", env("SYNC_CONFIG", "config.json"), "path to JSON configuration")
-	flag.BoolVar(&showVersion, "version", false, "print version and exit")
-	flag.Parse()
-	if showVersion {
+	opts, err := parseCLI(os.Args[1:])
+	if err != nil {
+		os.Exit(2)
+	}
+	if opts.ShowVersion {
 		fmt.Println(version)
 		return
 	}
-	mode := "sync"
-	if flag.NArg() > 0 {
-		mode = flag.Arg(0)
-	}
-	if mode != "sync" && mode != "daemon" {
-		fmt.Fprintln(os.Stderr, "usage: docmost-openviking-sync [-config file] [sync|daemon]")
-		os.Exit(2)
-	}
-	cfg, err := loadConfig(path)
+	cfg, err := loadConfig(opts)
 	if err != nil {
 		slog.Error("configuration error", "error", err)
 		os.Exit(2)
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if mode == "sync" {
+	if cfg.Mode == "sync" {
 		if run(ctx, cfg) {
 			os.Exit(1)
 		}
@@ -81,6 +95,43 @@ func main() {
 		slog.Error("daemon stopped", "error", err)
 		os.Exit(1)
 	}
+}
+
+func parseCLI(args []string) (cliOptions, error) {
+	var opts cliOptions
+	flags := flag.NewFlagSet("docmost-openviking-sync", flag.ContinueOnError)
+	flags.SetOutput(os.Stderr)
+	flags.StringVar(&opts.ConfigPath, "config", "", "path to optional JSON configuration")
+	flags.StringVar(&opts.Mode, "mode", "", "run mode: sync or daemon")
+	flags.StringVar(&opts.DocmostURL, "docmost-url", "", "Docmost API URL")
+	flags.StringVar(&opts.DocmostToken, "docmost-token", "", "Docmost API token")
+	flags.StringVar(&opts.DocmostEmail, "docmost-email", "", "Docmost login email")
+	flags.StringVar(&opts.DocmostPassword, "docmost-password", "", "Docmost login password")
+	flags.StringVar(&opts.OpenVikingURL, "openviking-url", "", "OpenViking API URL")
+	flags.StringVar(&opts.OpenVikingAPIKey, "openviking-api-key", "", "OpenViking API key")
+	flags.StringVar(&opts.OpenVikingRoot, "openviking-root", "", "OpenViking destination root")
+	flags.StringVar(&opts.StatePath, "state-path", "", "path to persistent sync state")
+	flags.StringVar(&opts.Interval, "interval", "", "full reconciliation interval")
+	flags.StringVar(&opts.Allowlist, "allowlist", "", "comma-separated Docmost space IDs or slugs to include")
+	flags.StringVar(&opts.Denylist, "denylist", "", "comma-separated Docmost space IDs or slugs to exclude")
+	flags.StringVar(&opts.WebhookListen, "webhook-listen", "", "webhook HTTP listen address")
+	flags.StringVar(&opts.WebhookPath, "webhook-path", "", "webhook HTTP path")
+	flags.StringVar(&opts.WebhookSecret, "webhook-secret", "", "Docmost webhook HMAC secret")
+	flags.StringVar(&opts.WebhookDebounce, "webhook-debounce", "", "webhook reconciliation debounce")
+	flags.BoolVar(&opts.ShowVersion, "version", false, "print version and exit")
+	if err := flags.Parse(args); err != nil {
+		return opts, err
+	}
+	opts.visited = make(map[string]bool)
+	flags.Visit(func(f *flag.Flag) { opts.visited[f.Name] = true })
+	if flags.NArg() > 1 {
+		return opts, fmt.Errorf("usage: docmost-openviking-sync [flags] [sync|daemon]")
+	}
+	if flags.NArg() == 1 {
+		opts.Mode = flags.Arg(0)
+		opts.visited["mode"] = true
+	}
+	return opts, nil
 }
 
 func runDaemon(ctx context.Context, cfg config) error {
@@ -157,42 +208,29 @@ func run(ctx context.Context, cfg config) bool {
 	json.NewEncoder(os.Stdout).Encode(report)
 	return report.Failed()
 }
-func loadConfig(path string) (config, error) {
-	var c config
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return c, err
+func loadConfig(opts cliOptions) (config, error) {
+	c := defaultConfig()
+	path := opts.ConfigPath
+	if !opts.visited["config"] {
+		if value, ok := os.LookupEnv("SYNC_CONFIG"); ok {
+			path = value
+		}
 	}
-	if err := json.Unmarshal(b, &c); err != nil {
-		return c, err
+	if path != "" {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return c, fmt.Errorf("read config %q: %w", path, err)
+		}
+		if err := json.Unmarshal(b, &c); err != nil {
+			return c, fmt.Errorf("parse config %q: %w", path, err)
+		}
 	}
-	c.Docmost.URL = first(os.Getenv("DOCMOST_API_URL"), c.Docmost.URL)
-	c.Docmost.Token = first(os.Getenv("DOCMOST_API_TOKEN"), os.Getenv("DOCMOST_TOKEN"), c.Docmost.Token)
-	c.Docmost.Email = first(os.Getenv("DOCMOST_EMAIL"), c.Docmost.Email)
-	c.Docmost.Password = first(os.Getenv("DOCMOST_PASSWORD"), c.Docmost.Password)
-	c.OpenViking.URL = first(os.Getenv("OPENVIKING_URL"), c.OpenViking.URL)
-	c.OpenViking.APIKey = first(os.Getenv("OPENVIKING_API_KEY"), c.OpenViking.APIKey)
-	c.Webhook.Listen = first(os.Getenv("WEBHOOK_LISTEN"), c.Webhook.Listen)
-	c.Webhook.Path = first(os.Getenv("WEBHOOK_PATH"), c.Webhook.Path)
-	c.Webhook.Secret = first(os.Getenv("DOCMOST_WEBHOOK_SECRET"), c.Webhook.Secret)
-	c.Webhook.Debounce = first(os.Getenv("WEBHOOK_DEBOUNCE"), c.Webhook.Debounce)
-	if c.OpenViking.Root == "" {
-		c.OpenViking.Root = "viking://user/resources/docmost"
-	}
-	if c.StatePath == "" {
-		c.StatePath = filepath.Join("data", "state.json")
-	}
-	if c.Interval == "" {
-		c.Interval = "24h"
-	}
-	if c.Webhook.Listen == "" {
-		c.Webhook.Listen = ":8080"
-	}
-	if c.Webhook.Path == "" {
-		c.Webhook.Path = "/events/docmost"
-	}
-	if c.Webhook.Debounce == "" {
-		c.Webhook.Debounce = "10s"
+
+	applyEnvironment(&c)
+	applyCLI(&c, opts)
+
+	if c.Mode != "sync" && c.Mode != "daemon" {
+		return c, fmt.Errorf("mode must be sync or daemon")
 	}
 	interval, err := time.ParseDuration(c.Interval)
 	if err != nil || interval < time.Second {
@@ -205,22 +243,97 @@ func loadConfig(path string) (config, error) {
 	if !strings.HasPrefix(c.Webhook.Path, "/") {
 		return c, fmt.Errorf("webhook.path must start with /")
 	}
+	if c.Webhook.Secret != "" && c.Webhook.Listen == "" {
+		return c, fmt.Errorf("webhook.listen is required when webhook.secret is set")
+	}
 	if c.Docmost.URL == "" || (c.Docmost.Token == "" && (c.Docmost.Email == "" || c.Docmost.Password == "")) || c.OpenViking.URL == "" {
 		return c, fmt.Errorf("docmost.url, Docmost credentials (token or email/password), and openviking.url are required")
 	}
 	return c, nil
 }
-func first(values ...string) string {
-	for _, v := range values {
-		if strings.TrimSpace(v) != "" {
-			return v
+
+func defaultConfig() config {
+	var c config
+	c.Mode = "sync"
+	c.OpenViking.URL = "http://127.0.0.1:1933"
+	c.OpenViking.Root = "viking://user/resources/docmost"
+	c.StatePath = filepath.Join("data", "state.json")
+	c.Interval = "24h"
+	c.Webhook.Listen = ":8080"
+	c.Webhook.Path = "/events/docmost"
+	c.Webhook.Debounce = "10s"
+	return c
+}
+
+func applyEnvironment(c *config) {
+	setFromEnv(&c.Mode, "SYNC_MODE")
+	setFromEnv(&c.Docmost.URL, "DOCMOST_API_URL", "DOCMOST_URL")
+	setFromEnv(&c.Docmost.Token, "DOCMOST_API_TOKEN", "DOCMOST_TOKEN")
+	setFromEnv(&c.Docmost.Email, "DOCMOST_EMAIL")
+	setFromEnv(&c.Docmost.Password, "DOCMOST_PASSWORD")
+	setFromEnv(&c.OpenViking.URL, "OPENVIKING_URL")
+	setFromEnv(&c.OpenViking.APIKey, "OPENVIKING_API_KEY")
+	setFromEnv(&c.OpenViking.Root, "OPENVIKING_ROOT")
+	setFromEnv(&c.StatePath, "SYNC_STATE_PATH")
+	setFromEnv(&c.Interval, "SYNC_INTERVAL")
+	setCSVFromEnv(&c.Allowlist, "DOCMOST_SPACE_ALLOWLIST")
+	setCSVFromEnv(&c.Denylist, "DOCMOST_SPACE_DENYLIST")
+	setFromEnv(&c.Webhook.Listen, "WEBHOOK_LISTEN")
+	setFromEnv(&c.Webhook.Path, "WEBHOOK_PATH")
+	setFromEnv(&c.Webhook.Secret, "DOCMOST_WEBHOOK_SECRET")
+	setFromEnv(&c.Webhook.Debounce, "WEBHOOK_DEBOUNCE")
+}
+
+func applyCLI(c *config, opts cliOptions) {
+	setCLI(&c.Mode, opts.Mode, opts, "mode")
+	setCLI(&c.Docmost.URL, opts.DocmostURL, opts, "docmost-url")
+	setCLI(&c.Docmost.Token, opts.DocmostToken, opts, "docmost-token")
+	setCLI(&c.Docmost.Email, opts.DocmostEmail, opts, "docmost-email")
+	setCLI(&c.Docmost.Password, opts.DocmostPassword, opts, "docmost-password")
+	setCLI(&c.OpenViking.URL, opts.OpenVikingURL, opts, "openviking-url")
+	setCLI(&c.OpenViking.APIKey, opts.OpenVikingAPIKey, opts, "openviking-api-key")
+	setCLI(&c.OpenViking.Root, opts.OpenVikingRoot, opts, "openviking-root")
+	setCLI(&c.StatePath, opts.StatePath, opts, "state-path")
+	setCLI(&c.Interval, opts.Interval, opts, "interval")
+	if opts.visited["allowlist"] {
+		c.Allowlist = parseCSV(opts.Allowlist)
+	}
+	if opts.visited["denylist"] {
+		c.Denylist = parseCSV(opts.Denylist)
+	}
+	setCLI(&c.Webhook.Listen, opts.WebhookListen, opts, "webhook-listen")
+	setCLI(&c.Webhook.Path, opts.WebhookPath, opts, "webhook-path")
+	setCLI(&c.Webhook.Secret, opts.WebhookSecret, opts, "webhook-secret")
+	setCLI(&c.Webhook.Debounce, opts.WebhookDebounce, opts, "webhook-debounce")
+}
+
+func setFromEnv(target *string, keys ...string) {
+	for _, key := range keys {
+		if value, ok := os.LookupEnv(key); ok {
+			*target = value
+			return
 		}
 	}
-	return ""
 }
-func env(k, d string) string {
-	if v := os.Getenv(k); v != "" {
-		return v
+
+func setCSVFromEnv(target *[]string, key string) {
+	if value, ok := os.LookupEnv(key); ok {
+		*target = parseCSV(value)
 	}
-	return d
+}
+
+func setCLI(target *string, value string, opts cliOptions, name string) {
+	if opts.visited[name] {
+		*target = value
+	}
+}
+
+func parseCSV(value string) []string {
+	var result []string
+	for _, item := range strings.Split(value, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			result = append(result, item)
+		}
+	}
+	return result
 }
