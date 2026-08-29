@@ -1,7 +1,10 @@
 image:
   repository: registry.brandymint.ru/rocketwash/docmost-openviking-sync
-  tag: "0.2.0"
+  tag: "0.2.1"
   pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: craas-auth
 
 secret:
   existingSecret: rocketwash-docmost-openviking-sync

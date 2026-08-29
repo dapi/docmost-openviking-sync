@@ -1,5 +1,7 @@
 .git
 .github
+.env
+.env.*
 data
 config.json
 *.md
